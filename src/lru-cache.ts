@@ -19,18 +19,60 @@ type LRUCacheProvider<T> = {
   set: (key: string, value: T) => void
 }
 
-// TODO: Implement LRU cache provider
 export function createLRUCacheProvider<T>({
   ttl,
   itemLimit,
 }: LRUCacheProviderOptions): LRUCacheProvider<T> {
+  const cache: Map<string, { value: T; expiry: number }> = new Map()
+
   return {
     has: (key: string) => {
-      return false
+      const currentTime = Date.now()
+      const cacheItem = cache.get(key)
+      if (!cacheItem) {
+        return false
+      }
+      if (cacheItem && cacheItem.expiry < currentTime) {
+        cache.delete(key)
+        return false
+      }
+
+      cache.delete(key)
+      cache.set(key, { value: cacheItem.value, expiry: currentTime + ttl })
+      return true
     },
     get: (key: string) => {
-      return undefined
+      const currentTime = Date.now()
+      const cacheItem = cache.get(key)
+      if (!cacheItem) {
+        return undefined
+      }
+
+      if (cacheItem.expiry < currentTime) {
+        cache.delete(key)
+        return undefined
+      }
+
+      // Move item to the end to be the recent item
+      cache.delete(key)
+      cache.set(key, { value: cacheItem.value, expiry: currentTime + ttl })
+
+      return cacheItem.value
     },
-    set: (key: string, value: T) => {},
+    set: (key: string, value: T) => {
+      const currentTime = Date.now()
+      if (cache.has(key)) {
+        // Remove key if already exists
+        cache.delete(key)
+      }
+
+      if (cache.size === itemLimit) {
+        // Remove oldest key if limit exceeds
+        const oldestKey = cache.keys().next().value ?? ''
+        cache.delete(oldestKey)
+      }
+
+      cache.set(key, { value, expiry: currentTime + ttl })
+    },
   }
 }
